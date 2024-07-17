@@ -6,10 +6,12 @@
   },
   "scripts": {
     "build": "tsc",
-    "build:webpack": "webpack --config lib/webpack.config.js",
+    "build:webpack": "webpack --config webpack.config.js",
     "watch": "tsc -w",
     "test": "jest",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "deploy": "npm run build:webpack && npm run synth && cdk deploy"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",
@@ -24,6 +26,7 @@
   "dependencies": {
     "aws-cdk-lib": "2.149.0",
     "constructs": "^10.0.0",
-    "source-map-support": "^0.5.21"
+    "source-map-support": "^0.5.21",
+    "webpack-node-externals": "^3.0.0"
   }
 }
