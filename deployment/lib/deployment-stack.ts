@@ -21,6 +21,16 @@ export class DeploymentStack extends cdk.Stack {
       defaultMethodOptions: {
         apiKeyRequired: true,
       },
+      policy: new cdk.aws_iam.PolicyDocument({
+        statements: [
+          new cdk.aws_iam.PolicyStatement({
+            effect: cdk.aws_iam.Effect.ALLOW,
+            principals: [new cdk.aws_iam.AnyPrincipal()],
+            actions: ['execute-api:Invoke'],
+            resources: ['*'],
+          }),
+        ],
+      }),
     });
 
     api.root.addMethod('ANY', new apigateway.LambdaIntegration(cartApiLambda, {
