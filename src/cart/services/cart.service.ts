@@ -1,58 +1,89 @@
 import { Injectable } from '@nestjs/common';
-import { CartStatuses } from '../models/index';
+import { Cart, CartStatuses } from '../models/index';
 import { randomUUID } from 'crypto';
-
-import { Cart } from '../models';
+import { Pool, QueryResult } from 'pg';
 
 @Injectable()
 export class CartService {
-  private userCarts: Record<string, Cart> = {};
+  private pool: Pool;
 
-  findByUserId(userId: string): Cart {
-    return this.userCarts[userId];
+  constructor() {
+    const host = process.env.RDS_HOSTNAME;
+    const port = parseInt(process.env.RDS_PORT, 10);
+    const database = process.env.RDS_DB_NAME;
+    const user = process.env.RDS_USERNAME;
+    const password = process.env.RDS_PASSWORD;
+
+    this.pool = new Pool({
+      host,
+      port,
+      database,
+      user,
+      password,
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    });
   }
 
-  createByUserId(userId: string): Cart {
+  async findByUserId(userId: string): Promise<Cart> {
+    const query = 'SELECT * FROM carts WHERE user_id = $1';
+    const result: QueryResult = await this.pool.query(query, [userId]);
+    return result.rows[0];
+  }
+
+  async createByUserId(userId: string): Promise<Cart> {
     const id = randomUUID();
-    const userCart = {
-      id,
-      items: [],
-      user_id: userId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      status: CartStatuses.OPEN,
-    };
+    userId ? userId : (userId = randomUUID());
+    const createdAt = new Date().toISOString();
+    const updatedAt = createdAt;
+    const status = CartStatuses.OPEN;
 
-    this.userCarts[userId] = userCart;
-
-    return userCart;
+    const query =
+      'INSERT INTO carts (id, user_id, created_at, updated_at, status) VALUES ($1, $2, $3, $4, $5) RETURNING *';
+    const values = [id, userId, createdAt, updatedAt, status];
+    const result: QueryResult = await this.pool.query(query, values);
+    return result.rows[0];
   }
 
-  findOrCreateByUserId(userId: string): Cart {
-    const userCart = this.findByUserId(userId);
-
-    if (userCart) {
-      return userCart;
+  async findOrCreateByUserId(userId: string): Promise<Cart> {
+    const cart = await this.findByUserId(userId);
+    if (cart) {
+      return cart;
     }
-
     return this.createByUserId(userId);
   }
 
-  updateByUserId(userId: string, { items }: Cart): Cart {
-    const { id, ...rest } = this.findOrCreateByUserId(userId);
+  async updateByUserId(userId: string, { items }: Cart): Promise<Cart> {
+    const cart = await this.findOrCreateByUserId(userId);
+    console.log(cart);
+    const updatedAt = new Date().toISOString();
+    if (items) {
+      console.log(items);
 
-    const updatedCart = {
-      id,
-      ...rest,
-      items: [...items],
-    };
+      const queryDelete = 'DELETE FROM cart_items WHERE cart_id = $1';
+      await this.pool.query(queryDelete, [cart.id]);
 
-    this.userCarts[userId] = { ...updatedCart };
+      items.map(async (item) => {
+        console.log(item);
+        const queryItems =
+          'INSERT INTO cart_items (product_id, count, cart_id) VALUES ($1, $2, $3) RETURNING *';
+        const valuesItems = [item.product_id, item.count, cart.id];
+        const resultItems: QueryResult = await this.pool.query(queryItems, valuesItems);
+        console.log(resultItems);
+      });
 
-    return { ...updatedCart };
+      const query =
+        'UPDATE carts SET updated_at = $1 WHERE id = $2 RETURNING *';
+      const values = [updatedAt, cart.id];
+      const result: QueryResult = await this.pool.query(query, values);
+
+      return result.rows[0];
+    }
   }
 
-  removeByUserId(userId: string): void {
-    this.userCarts[userId] = null;
+  async removeByUserId(userId: string): Promise<void> {
+    const query = 'DELETE FROM carts WHERE user_id = $1';
+    await this.pool.query(query, [userId]);
   }
 }
