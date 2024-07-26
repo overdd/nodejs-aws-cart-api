@@ -56,21 +56,17 @@ export class CartService {
 
   async updateByUserId(userId: string, { items }: Cart): Promise<Cart> {
     const cart = await this.findOrCreateByUserId(userId);
-    console.log(cart);
+
     const updatedAt = new Date().toISOString();
     if (items) {
-      console.log(items);
-
       const queryDelete = 'DELETE FROM cart_items WHERE cart_id = $1';
       await this.pool.query(queryDelete, [cart.id]);
 
       items.map(async (item) => {
-        console.log(item);
         const queryItems =
           'INSERT INTO cart_items (product_id, count, cart_id) VALUES ($1, $2, $3) RETURNING *';
         const valuesItems = [item.product_id, item.count, cart.id];
         const resultItems: QueryResult = await this.pool.query(queryItems, valuesItems);
-        console.log(resultItems);
       });
 
       const query =
@@ -83,7 +79,10 @@ export class CartService {
   }
 
   async removeByUserId(userId: string): Promise<void> {
-    const query = 'DELETE FROM carts WHERE user_id = $1';
-    await this.pool.query(query, [userId]);
+    const deleteCartItemsQuery = 'DELETE FROM cart_items WHERE cart_id = (SELECT id FROM carts WHERE user_id = $1)';
+    await this.pool.query(deleteCartItemsQuery, [userId]);
+  
+    const deleteCartQuery = 'DELETE FROM carts WHERE user_id = $1';
+    await this.pool.query(deleteCartQuery, [userId]);
   }
 }
