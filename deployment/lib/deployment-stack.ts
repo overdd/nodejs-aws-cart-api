@@ -13,7 +13,13 @@ export class DeploymentStack extends cdk.Stack {
         exclude: ['*.d.ts'],
       }),
       handler: 'main.handler',
-      environment: {},
+      environment: {
+        "RDS_HOSTNAME": process.env.RDS_HOSTNAME ?? 'localhost',
+        "RDS_PORT": process.env.RDS_PORT ?? '5432',
+        "RDS_DB_NAME": process.env.RDS_DB_NAME ?? 'table',
+        "RDS_USERNAME": process.env.RDS_USERNAME ?? 'postgres',
+        "RDS_PASSWORD": process.env.RDS_PASSWORD ?? 'postgres',
+      },
     });
 
     const api = new apigateway.RestApi(this, 'CartServiceApi', {
