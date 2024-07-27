@@ -49,12 +49,16 @@ export class CartService {
 
   async updateByUserId(userId: string, { items }: Cart): Promise<Cart> {
     const cart = await this.findOrCreateByUserId(userId);
+    const updatedAt = new Date().toISOString();
 
-    try {
-      const updatedAt = new Date().toISOString();
-      if (items && items.length > 0) {
+    if (items && items.length > 0) {
+      const client = await this.pool.connect();
+
+      try {
+        await client.query('BEGIN');
+
         const queryDelete = 'DELETE FROM cart_items WHERE cart_id = $1';
-        await this.pool.query(queryDelete, [cart.id]);
+        await client.query(queryDelete, [cart.id]);
 
         const queryItems =
           'INSERT INTO cart_items (product_id, count, cart_id) VALUES ($1, $2, $3)';
@@ -64,19 +68,24 @@ export class CartService {
           cart.id,
         ]);
         await Promise.all(
-          valuesItems.map((values) => this.pool.query(queryItems, values)),
+          valuesItems.map((values) => client.query(queryItems, values)),
         );
-      }
 
-      const query =
-        'UPDATE carts SET updated_at = $1 WHERE id = $2 RETURNING *';
-      const values = [updatedAt, cart.id];
-      const result: QueryResult = await this.pool.query(query, values);
-      return result.rows[0];
-    } catch (error) {
-      throw new InternalServerErrorException(
-        'Failed to update cart by user ID',
-      );
+        const query =
+          'UPDATE carts SET updated_at = $1 WHERE id = $2 RETURNING *';
+        const values = [updatedAt, cart.id];
+        const result: QueryResult = await client.query(query, values);
+
+        await client.query('COMMIT');
+        return result.rows[0];
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw new InternalServerErrorException(
+          'Failed to update cart by user ID',
+        );
+      } finally {
+        client.release();
+      }
     }
   }
 
@@ -85,7 +94,7 @@ export class CartService {
       const deleteCartItemsQuery =
         'DELETE FROM cart_items WHERE cart_id = (SELECT id FROM carts WHERE user_id = $1)';
       await this.pool.query(deleteCartItemsQuery, [userId]);
-      
+
       const deleteCartQuery = 'DELETE FROM carts WHERE user_id = $1';
       await this.pool.query(deleteCartQuery, [userId]);
     } catch (error) {
