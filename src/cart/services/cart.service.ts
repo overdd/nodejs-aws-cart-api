@@ -6,6 +6,7 @@ import {
 import { Cart, CartStatuses } from '../models/index';
 import { randomUUID } from 'crypto';
 import { Pool, QueryResult } from 'pg';
+import { CART_QUERIES } from './cart.query';
 
 @Injectable()
 export class CartService {
@@ -13,8 +14,7 @@ export class CartService {
 
   async findByUserId(userId: string): Promise<Cart> {
     try {
-      const query = 'SELECT * FROM carts WHERE user_id = $1';
-      const result: QueryResult = await this.pool.query(query, [userId]);
+      const result: QueryResult = await this.pool.query(CART_QUERIES.findByUserId, [userId]);
       return result.rows[0];
     } catch (error) {
       throw new InternalServerErrorException('Failed to find cart by user ID');
@@ -27,10 +27,8 @@ export class CartService {
       const createdAt = new Date().toISOString();
       const status = CartStatuses.OPEN;
 
-      const query =
-        'INSERT INTO carts (id, user_id, created_at, updated_at, status) VALUES ($1, $2, $3, $4, $5) RETURNING *';
       const values = [id, userId, createdAt, createdAt, status];
-      const result: QueryResult = await this.pool.query(query, values);
+      const result: QueryResult = await this.pool.query(CART_QUERIES.createCart, values);
       return result.rows[0];
     } catch (error) {
       throw new InternalServerErrorException(
@@ -56,26 +54,17 @@ export class CartService {
 
       try {
         await client.query('BEGIN');
-
-        const queryDelete = 'DELETE FROM cart_items WHERE cart_id = $1';
-        await client.query(queryDelete, [cart.id]);
-
-        const queryItems =
-          'INSERT INTO cart_items (product_id, count, cart_id) VALUES ($1, $2, $3)';
+        await client.query(CART_QUERIES.deleteCartItems, [cart.id]);
         const valuesItems = items.map((item) => [
           item.product_id,
           item.count,
           cart.id,
         ]);
         await Promise.all(
-          valuesItems.map((values) => client.query(queryItems, values)),
+          valuesItems.map((values) => client.query(CART_QUERIES.insertCartItem, values)),
         );
-
-        const query =
-          'UPDATE carts SET updated_at = $1 WHERE id = $2 RETURNING *';
         const values = [updatedAt, cart.id];
-        const result: QueryResult = await client.query(query, values);
-
+        const result: QueryResult = await client.query(CART_QUERIES.updateCart, values);
         await client.query('COMMIT');
         return result.rows[0];
       } catch (error) {
@@ -90,17 +79,19 @@ export class CartService {
   }
 
   async removeByUserId(userId: string): Promise<void> {
+    const client = await this.pool.connect();
     try {
-      const deleteCartItemsQuery =
-        'DELETE FROM cart_items WHERE cart_id = (SELECT id FROM carts WHERE user_id = $1)';
-      await this.pool.query(deleteCartItemsQuery, [userId]);
-
-      const deleteCartQuery = 'DELETE FROM carts WHERE user_id = $1';
-      await this.pool.query(deleteCartQuery, [userId]);
+      await client.query('BEGIN');
+      await this.pool.query(CART_QUERIES.deleteCartItemsByUserId, [userId]);
+      await this.pool.query(CART_QUERIES.deleteCartByUserId, [userId]);
+      await client.query('COMMIT');
     } catch (error) {
+      await client.query('ROLLBACK');
       throw new InternalServerErrorException(
         'Failed to remove cart by user ID',
       );
+    } finally {
+      client.release();
     }
   }
 }
