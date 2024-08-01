@@ -1,0 +1,13 @@
+# EB ignore
+
+*
+
+!src
+!.dockerignore
+!Dockerfile
+!package*
+!tsconfig*
+!webpack.config*
+
+cdk/
+node_modules/
