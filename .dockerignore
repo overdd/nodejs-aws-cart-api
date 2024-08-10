@@ -1,0 +1,13 @@
+.git/ # git folder, not needed in docker image
+cdk/ # AWS CDK folder, not needed in docker image
+dist/ # builded app, will be replaced by docker build
+node_modules/ # node_modules will be copied by docker build
+.dockerignore
+.DS_Store
+.env*
+.eslintrc.js
+.gitignore
+.prettierrc
+Dockerfile
+nest-cli.json
+README.md
